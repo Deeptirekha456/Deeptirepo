@@ -3,8 +3,8 @@ pipeline {
 
   environment {
     AWS_DEFAULT_REGION = 'ap-south-1'
-    EB_APP_NAME        = 'hello-world-app'
-    EB_ENV_NAME        = 'hello-world-env'
+    EB_APP_NAME        = 'hello-world-app'    // your existing EB application
+    EB_ENV_NAME        = 'hello-world-env'    // your existing EB environment
   }
 
   stages {
@@ -26,21 +26,26 @@ pipeline {
           $class: 'AmazonWebServicesCredentialsBinding',
           credentialsId: 'awscredentials'
         ]]) {
-          // Prepare the ZIP bundle
+          // 1) Prepare a ZIP bundle with your JAR
           sh '''
-            mkdir -p deploy
+            rm -rf deploy
+            mkdir deploy
             cp target/*.jar deploy/app.jar
             cd deploy
             zip -r app.zip app.jar
           '''
 
-          // Initialize & deploy with the EB CLI
+          // 2) Point eb CLI at your existing app/env and deploy
           sh '''
-            eb init $EB_APP_NAME \
-              --region $AWS_DEFAULT_REGION \
-              --platform java \
-              --keyname my-ec2-keypair
-            eb deploy $EB_ENV_NAME --staged
+            # Use your AWS creds + region
+            export AWS_DEFAULT_REGION='${AWS_DEFAULT_REGION}'
+
+            # Tell EB CLI which application & environment to target
+            eb init ${EB_APP_NAME} --region ${AWS_DEFAULT_REGION} --no-interactive
+            eb use ${EB_ENV_NAME}
+
+            # Push the new version
+            eb deploy --staged
           '''
         }
       }
@@ -49,10 +54,10 @@ pipeline {
 
   post {
     success {
-      echo '✅ Deployment succeeded!'
+      echo "✅ Deployed build #${env.BUILD_NUMBER} to ${EB_ENV_NAME}"
     }
     failure {
-      echo '❌ Deployment failed!'
+      echo "❌ Deployment of build #${env.BUILD_NUMBER} failed!"
     }
   }
 }
